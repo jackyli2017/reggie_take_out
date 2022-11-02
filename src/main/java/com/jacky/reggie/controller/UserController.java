@@ -9,11 +9,13 @@ import com.jacky.reggie.utils.ValidateCodeUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/user")
@@ -22,6 +24,9 @@ public class UserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private RedisTemplate redisTemplate;
 
     /**
      * 发送手机验证码短信
@@ -38,7 +43,9 @@ public class UserController {
             //这里不用真的发送验证码
             //SMSUtils.sendMessage("瑞吉外卖", "", phone, code);
 
-            session.setAttribute(phone, code);
+            //session.setAttribute(phone, code);
+            redisTemplate.opsForValue().set(phone, code, 5, TimeUnit.MINUTES);
+
             return R.success("手机验证码发送成功");
         }
 
@@ -49,7 +56,9 @@ public class UserController {
     public R<User> login(@RequestBody Map map, HttpSession session) {
         String phone = map.get("phone").toString();
         String code = map.get("code").toString();
-        Object codeInSession = session.getAttribute(phone);
+
+        //Object codeInSession = session.getAttribute(phone);
+        Object codeInSession = redisTemplate.opsForValue().get(phone);
 
         if(codeInSession != null && codeInSession.equals(code)) {
             //判断当前手机号对应的用户是否为新用户，如果是，则自动完成注册
@@ -64,6 +73,9 @@ public class UserController {
             }
 
             session.setAttribute("user", user.getId());
+            // 登录成功，删除验证码
+            redisTemplate.delete(phone);
+
             return R.success(user);
         }
 
